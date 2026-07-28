@@ -1,26 +1,37 @@
-# 代码骨架（待实现）
+# 代码骨架
 
-本目录为系统实现代码的预留位置，当前处于架构设计阶段，尚未开始编码。
+当前处于架构设计阶段，**端-边-云自适应调度模块（角色 #2）v0.1 已实现**，其余模块待实现。
 
-## 计划结构（暂定）
+## 结构
 
 ```
 code/
-├── core/               # 自研核心
-│   ├── orchestrator/   # 编排器（感知-规划-执行-反馈闭环）
-│   ├── scheduler/      # 端-边-云自适应调度（角色#2，见 docs/端边云调度模块设计.md）
-│   ├── router/         # 动态拓扑路由（角色#3）
-│   ├── memory/         # 分布式记忆 + 压缩唤醒（角色#1）
-│   └── executor/       # 执行引擎 + 工具接口 + 异常重试（角色#4）
-├── adapters/           # 模型适配层（多 LLM 兼容）
-├── tools/              # 工具注册表
-├── eval/               # 评测脚本（角色#5）
-├── frontend/           # 推理轨迹可视化（角色#8）
-└── tests/
+└── core/
+    └── scheduler/          # 端-边-云自适应调度（角色 #2，v0.1 可运行）
+        ├── models.py       # 资源层/模型/子任务/决策
+        ├── metrics.py      # 时延/成本/隐私满足率
+        ├── split.py        # EdgeShard 式层切分
+        ├── ports.py        # #1/#3/#4 抽象接口
+        ├── scheduler.py    # 两阶段调度器
+        ├── sim.py          # 单机模拟 + 演示
+        ├── tests/          # 单元测试
+        └── README.md
 ```
 
-## 当前进度
+## 运行
 
-- 架构设计文档：见 `docs/架构设计文档.docx`
-- 端-边-云调度模块设计：见 `docs/端边云调度模块设计.md`（含调度器伪代码）
-- 代码实现：待架构冻结后启动（计划第 3 周起）
+```bash
+cd code
+python -m core.scheduler.sim                              # 调度演示
+python -m unittest core.scheduler.tests.test_scheduler    # 单元测试
+```
+
+## 待实现模块（对应分工）
+
+- `core/orchestrator/` 编排器（#1）
+- `core/router/` 动态拓扑路由（#3）
+- `core/memory/` 分布式记忆 + 压缩唤醒（#1）
+- `core/executor/` 执行引擎 + 工具接口 + 异常重试（#4）
+- `adapters/` 模型适配层（多 LLM 兼容，#6）
+- `eval/` 评测脚本（#5）
+- `frontend/` 推理轨迹可视化（#8）
