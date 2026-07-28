@@ -95,6 +95,12 @@ class ResourceLayer:
     cost_per_1k_tok: float     # p_ℓ：单位成本（¥/1K tokens）
     models: tuple[ModelProfile, ...] = ()
 
+    def find_model(self, name: str) -> Optional[ModelProfile]:
+        for m in self.models:
+            if m.name == name:
+                return m
+        return None
+
 
 @dataclass(frozen=True)
 class ResourceEnvironment:

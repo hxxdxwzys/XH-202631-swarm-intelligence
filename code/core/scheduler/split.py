@@ -3,9 +3,9 @@ v0.1 用枚举求最优块分配（层数 ≤3、块数 ~48，枚举量小，C(K
 v0.2 再引入阶段切分（prefill/decode 解耦）与 DP 加速。"""
 from __future__ import annotations
 from core.scheduler.models import (
-    ModelProfile, Subtask, ResourceEnvironment, SplitPlan,
+    ModelProfile, Subtask, ResourceEnvironment, ResourceLayer, SplitPlan,
 )
-from core.scheduler.metrics import latency_layer_split
+from core.scheduler.metrics import latency_layer_split, latency_phase_split
 
 
 def _allocations(k: int, n: int):
@@ -50,4 +50,30 @@ def best_layer_split(w: Subtask, model: ModelProfile, env: ResourceEnvironment,
         if lat < best_lat:
             best_lat = lat
             best_plan = plan
+    return best_plan
+
+
+def best_phase_split(w: Subtask, model: ModelProfile, env: ResourceEnvironment,
+                     allowed_kinds: tuple[str, ...]) -> SplitPlan | None:
+    """阶段切分（§6.3.3 模式B）：prefill→强算力层，decode→低时延层。
+    要求两层均能承载完整模型权重（disaggregated serving 假设）。
+    返回时延最优的 (prefill层, decode层) 方案，无则 None。"""
+    from core.scheduler.metrics import latency_phase_split as _lps
+    layers = [env.by_kind(k) for k in allowed_kinds]
+    layers = [l for l in layers
+              if l is not None and l.compute_tps > 0
+              and model.required_mem_gb <= l.mem_gb]
+    if len(layers) < 2:
+        return None
+    best_plan: SplitPlan | None = None
+    best_lat = float("inf")
+    for p in layers:
+        for d in layers:
+            if p.name == d.name:
+                continue
+            lat = _lps(w, model, p, d)
+            if lat <= w.latency_budget_ms and lat < best_lat:
+                best_lat = lat
+                best_plan = SplitPlan(mode="phase", phase_layers=(p.name, d.name),
+                                      model_name=model.name)
     return best_plan

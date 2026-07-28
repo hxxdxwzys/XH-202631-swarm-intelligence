@@ -57,6 +57,24 @@ def cost_layer_split(w: Subtask, plan: SplitPlan, env: ResourceEnvironment) -> f
     return total
 
 
+def latency_phase_split(w: Subtask, model: ModelProfile,
+                        p_layer: ResourceLayer, d_layer: ResourceLayer) -> float:
+    """阶段切分时延（§6.4 模式B）：prefill(计算密集)→p 层，decode(访存密集)→d 层。"""
+    if p_layer.compute_tps <= 0 or d_layer.compute_tps <= 0:
+        return float("inf")
+    prefill_ms = w.est_input_tok / p_layer.compute_tps * 1000.0
+    decode_ms = w.est_output_tok / d_layer.compute_tps * 1000.0
+    kv_transfer = d_layer.rtt_ms + model.blocks * KV_PER_BLOCK_MS  # KV 从 p 传到 d
+    return p_layer.rtt_ms + prefill_ms + kv_transfer + decode_ms
+
+
+def cost_phase_split(w: Subtask, model: ModelProfile,
+                     p_layer: ResourceLayer, d_layer: ResourceLayer) -> float:
+    """阶段切分资源开销：prefill token 在 p 层计费，decode token 在 d 层计费。"""
+    return ((w.est_input_tok / 1000.0) * p_layer.cost_per_1k_tok
+            + (w.est_output_tok / 1000.0) * d_layer.cost_per_1k_tok)
+
+
 def privacy_satisfaction(decisions: list[ScheduleDecision],
                          subtasks: list[Subtask],
                          env: ResourceEnvironment) -> float:

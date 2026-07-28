@@ -1,0 +1,27 @@
+{
+  "layers": [
+    {
+      "name": "终端", "kind": "end", "compute_tps": 200.0, "mem_gb": 12.0,
+      "rtt_ms": 2.0, "cost_per_1k_tok": 0.0,
+      "models": [
+        {"name": "Qwen3-1.7B", "param_b": 1.7, "context_window": 32768, "capability": 0.55, "blocks": 28},
+        {"name": "Qwen3-3B", "param_b": 3.0, "context_window": 32768, "capability": 0.65, "blocks": 36}
+      ]
+    },
+    {
+      "name": "边缘", "kind": "edge", "compute_tps": 600.0, "mem_gb": 24.0,
+      "rtt_ms": 12.0, "cost_per_1k_tok": 0.002,
+      "models": [
+        {"name": "Qwen3-8B", "param_b": 8.0, "context_window": 32768, "capability": 0.78, "blocks": 36}
+      ]
+    },
+    {
+      "name": "云端", "kind": "cloud", "compute_tps": 2000.0, "mem_gb": 80.0,
+      "rtt_ms": 60.0, "cost_per_1k_tok": 0.012,
+      "models": [
+        {"name": "Qwen3-30B", "param_b": 30.0, "context_window": 131072, "capability": 0.92, "blocks": 48},
+        {"name": "Mega-48B", "param_b": 48.0, "context_window": 131072, "capability": 0.95, "blocks": 48}
+      ]
+    }
+  ]
+}

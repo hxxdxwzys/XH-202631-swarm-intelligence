@@ -7,6 +7,9 @@ from core.scheduler.models import (
     ComputeScale, LatencyTier, SensitivityLevel, ScheduleDecision,
 )
 from core.scheduler.scheduler import Scheduler
+from core.scheduler.adaptive import AdaptiveScheduler
+from core.scheduler.bandit import ContextualBandit
+from core.scheduler.events import ScheduleLogger
 from core.scheduler.metrics import privacy_satisfaction
 from core.scheduler.ports import ExecutorPort, ExecutionResult
 
@@ -108,5 +111,48 @@ def demo() -> None:
     print(f"隐私约束满足率 P_priv = {p_priv:.2%}")
 
 
+def demo_adaptive() -> None:
+    """自适应调度演示：受限上下文 bandit 在线学习 + 事件日志。"""
+    env = default_env()
+    executor = LocalSimExecutor(env, seed=7)
+    bandit = ContextualBandit(c=0.1, budget=10.0, sla_threshold=0.1)
+    sched = AdaptiveScheduler(env, executor, bandit)
+    logger = ScheduleLogger(path="scheduler_events.jsonl")
+
+    # 任务流：重复同类任务以观察 bandit 探索→利用
+    stream = (
+        [("a", ComputeScale.S2_HEAVY, LatencyTier.T2_MINUTE,
+          SensitivityLevel.L1_INTERNAL, 5000, 2000)] * 8
+        + [("b", ComputeScale.S1_MEDIUM, LatencyTier.T2_MINUTE,
+            SensitivityLevel.L2_SENSITIVE, 1000, 500)] * 4
+        + [("c", ComputeScale.S3_XHEAVY, LatencyTier.T3_BATCH,
+            SensitivityLevel.L0_PUBLIC, 8000, 4000)] * 2
+        + [("d", ComputeScale.S2_HEAVY, LatencyTier.T2_MINUTE,
+            SensitivityLevel.L3_CONFIDENTIAL, 4000, 2000)] * 2
+    )
+
+    print("=" * 72)
+    print("自适应调度演示（受限上下文 bandit 在线学习）")
+    print("=" * 72)
+    seq_a: list[str] = []  # (S2,L1) 上下文的模型选择序列
+    for step, (tag, sc, lt, sn, ti, to) in enumerate(stream):
+        w = Subtask(f"{tag}{step}", sc, lt, sn, ti, to)
+        d = sched.schedule(w)
+        res = executor.execute(w, d)
+        sched.feedback(w, d, res)
+        logger.log(d, step)
+        if (sc, sn) == (ComputeScale.S2_HEAVY, SensitivityLevel.L1_INTERNAL):
+            seq_a.append(d.model_name if d.feasible else "—")
+
+    print(f"(S2,L1) 模型选择序列: {seq_a}")
+    print(f"(S2,L1) arm 分布: {bandit.arm_distribution((ComputeScale.S2_HEAVY, SensitivityLevel.L1_INTERNAL))}")
+    print(f"(S1,L2) arm 分布: {bandit.arm_distribution((ComputeScale.S1_MEDIUM, SensitivityLevel.L2_SENSITIVE))}")
+    logger.write_jsonl()
+    print(f"事件日志已写入: {logger.path}")
+    print("汇总:", logger.summary())
+
+
 if __name__ == "__main__":
     demo()
+    print()
+    demo_adaptive()

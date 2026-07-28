@@ -6,3 +6,6 @@ _docx_dump.txt
 __pycache__/
 .venv/
 repo-stage/
+
+# 演示生成的调度事件日志
+scheduler_events.jsonl
