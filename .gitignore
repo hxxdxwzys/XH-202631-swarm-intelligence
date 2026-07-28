@@ -1,0 +1,8 @@
+资料pdf/
+_pdf_text/
+_docx_dump.txt
+.obsidian/
+*.log
+__pycache__/
+.venv/
+repo-stage/
