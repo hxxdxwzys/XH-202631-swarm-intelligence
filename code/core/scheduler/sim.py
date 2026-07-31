@@ -10,6 +10,7 @@ from core.scheduler.scheduler import Scheduler
 from core.scheduler.adaptive import AdaptiveScheduler
 from core.scheduler.bandit import ContextualBandit
 from core.scheduler.balancer import BatchScheduler, LoadTracker
+from core.scheduler.runtime import SchedulerRuntime
 from core.scheduler.events import ScheduleLogger
 from core.scheduler.metrics import (
     privacy_satisfaction, makespan, load_balance_index, idle_ratio,
@@ -191,9 +192,41 @@ def demo_balance() -> None:
     print(f"批量LPT层负载: {bt.loads()}")
 
 
+def demo_dag() -> None:
+    """DAG 运行时演示（v0.4）：菱形 DAG A→B→D / A→C→D 端到端执行。"""
+    env = default_env()
+    executor = LocalSimExecutor(env)
+    rt = SchedulerRuntime(env, executor)
+
+    dag = [
+        Subtask("A", ComputeScale.S1_MEDIUM, LatencyTier.T2_MINUTE,
+                SensitivityLevel.L0_PUBLIC, 1000, 500),
+        Subtask("B", ComputeScale.S2_HEAVY, LatencyTier.T2_MINUTE,
+                SensitivityLevel.L0_PUBLIC, 5000, 2000, depends_on=("A",)),
+        Subtask("C", ComputeScale.S1_MEDIUM, LatencyTier.T2_MINUTE,
+                SensitivityLevel.L0_PUBLIC, 1000, 500, depends_on=("A",)),
+        Subtask("D", ComputeScale.S1_MEDIUM, LatencyTier.T2_MINUTE,
+                SensitivityLevel.L0_PUBLIC, 1000, 500, depends_on=("B", "C")),
+    ]
+
+    print("=" * 72)
+    print("DAG 运行时演示（v0.4：A→B→D / A→C→D 端到端）")
+    print("=" * 72)
+    result = rt.run(dag)
+    for d in result["decisions"]:
+        tag = "✗" if not d.feasible else f"→ {d.layer_name}/{d.model_name} {d.latency_ms:.0f}ms"
+        split = f" [{d.split.mode}]" if d.split else ""
+        print(f"  [{d.subtask_id}] {tag}{split}")
+    print(f"\n关键路径: {result['critical_path']}")
+    print(f"完成 {result['completed']}/{result['total']}，失败 {result['failed']}")
+    print(f"汇总: {result['summary']}")
+
+
 if __name__ == "__main__":
     demo()
     print()
     demo_adaptive()
     print()
     demo_balance()
+    print()
+    demo_dag()
