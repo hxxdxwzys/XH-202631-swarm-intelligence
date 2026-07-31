@@ -93,3 +93,40 @@ def privacy_satisfaction(decisions: list[ScheduleDecision],
         if kinds.get(d.layer_name, "") not in allowed_layer_kinds(s.sensitivity):
             violations += 1
     return 1.0 - violations / len(decisions)
+
+
+# ===== v0.3 时间均衡指标 =====
+
+def makespan(loads: dict[str, float]) -> float:
+    """批量调度的 makespan：各层负载的最大值（最后完成的层）。
+    定义：从首批任务启动到末批任务完成的总时长。"""
+    return max(loads.values()) if loads else 0.0
+
+
+def load_balance_index(loads: dict[str, float]) -> float:
+    """负载均衡度（Jain 公平指数）：1 = 完全均衡，1/n = 全部集中在一层。
+    定义：各层负载的公平性度量，越接近 1 说明工作分布越均匀。"""
+    vals = list(loads.values())
+    n = len(vals)
+    if n == 0:
+        return 1.0
+    total = sum(vals)
+    if total == 0:
+        return 1.0
+    return total * total / (n * sum(v * v for v in vals))
+
+
+def idle_ratio(loads: dict[str, float]) -> float:
+    """空闲率：各层在 makespan 内的空闲时间占比。
+    定义：makespan 内所有层未在计算的空闲总时间 / (层数 × makespan)。
+    越低说明资源利用越充分。"""
+    vals = list(loads.values())
+    n = len(vals)
+    if n == 0:
+        return 0.0
+    m = max(vals) if vals else 0.0
+    if m == 0:
+        return 0.0
+    total_load = sum(vals)
+    total_idle = n * m - total_load
+    return total_idle / (n * m)

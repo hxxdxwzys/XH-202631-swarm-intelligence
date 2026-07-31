@@ -22,13 +22,16 @@ class Scheduler:
     """端-边-云自适应调度器（规则硬约束 + 代价最优）。"""
 
     def __init__(self, env: ResourceEnvironment, executor: ExecutorPort,
-                 weights: tuple[float, float, float] = (1.0, 0.01, 0.5)):
+                 weights: tuple[float, float, float] = (1.0, 0.01, 0.5),
+                 delta: float = 0.0):
         """
         weights: (α, β, γ) —— 时延项、资源开销项、质量缺口项权重（§6.3.2 J）。
+        delta: 负载项权重（v0.3 时间均衡，0 = 不启用）。
         """
         self.env = env
         self.executor = executor
         self.alpha, self.beta, self.gamma = weights
+        self.delta = delta
 
     def schedule(self, w: Subtask) -> ScheduleDecision:
         allowed_kinds, feasible = self._feasible(w)
@@ -74,13 +77,16 @@ class Scheduler:
                 ) -> tuple[ResourceLayer, ModelProfile, float]:
         return min(feasible, key=lambda t: self._J(w, t[0], t[1], t[2]))
 
-    def _J(self, w: Subtask, layer: ResourceLayer, m: ModelProfile, lat: float) -> float:
-        """代价函数 J = α·Lat/τ + β·Cost + γ·(1−κ)（§6.3.2）。"""
+    def _J(self, w: Subtask, layer: ResourceLayer, m: ModelProfile, lat: float,
+           load: float = 0.0) -> float:
+        """代价函数 J = α·Lat/τ + β·Cost + γ·(1−κ) + δ·Load（§6.3.2 + v0.3）。
+        load: 目标层当前负载（v0.3 时间均衡，delta>0 时生效）。"""
         cost = cost_single(w, layer, m)
         quality_gap = 1.0 - m.capability
         return (self.alpha * (lat / w.latency_budget_ms)
                 + self.beta * cost
-                + self.gamma * quality_gap)
+                + self.gamma * quality_gap
+                + self.delta * load)
 
     # —— 模型切分 ——
     def _try_split(self, w: Subtask,

@@ -9,8 +9,11 @@ from core.scheduler.models import (
 from core.scheduler.scheduler import Scheduler
 from core.scheduler.adaptive import AdaptiveScheduler
 from core.scheduler.bandit import ContextualBandit
+from core.scheduler.balancer import BatchScheduler, LoadTracker
 from core.scheduler.events import ScheduleLogger
-from core.scheduler.metrics import privacy_satisfaction
+from core.scheduler.metrics import (
+    privacy_satisfaction, makespan, load_balance_index, idle_ratio,
+)
 from core.scheduler.ports import ExecutorPort, ExecutionResult
 
 
@@ -152,7 +155,45 @@ def demo_adaptive() -> None:
     print("汇总:", logger.summary())
 
 
+def demo_balance() -> None:
+    """时间均衡演示（v0.3）：逐任务 vs 批量LPT 的 makespan/均衡度/空闲率 对比。"""
+    env = default_env()
+    executor = LocalSimExecutor(env)
+    single = Scheduler(env, executor)
+    batch = BatchScheduler(env, executor)
+
+    tasks = [Subtask(f"t{i}", ComputeScale.S1_MEDIUM, LatencyTier.T2_MINUTE,
+                     SensitivityLevel.L0_PUBLIC, 1000, 500) for i in range(9)]
+
+    # 逐任务调度（每任务独立选最优 → 倾向全堆云端）
+    st = LoadTracker([l.name for l in env.layers])
+    for w in tasks:
+        d = single.schedule(w)
+        if d.feasible:
+            st.assign(d.layer_name, d.latency_ms)
+
+    # 批量调度（LPT 均衡）
+    batch.schedule_batch(tasks)
+    bt = batch.tracker
+
+    print("=" * 72)
+    print("时间均衡演示（v0.3：逐任务 vs 批量LPT）")
+    print("=" * 72)
+    print(f"{'指标':<14} {'逐任务':<18} {'批量LPT':<18} {'改善'}")
+    print("-" * 72)
+    ms_s, ms_b = makespan(st.loads()), makespan(bt.loads())
+    bi_s, bi_b = load_balance_index(st.loads()), load_balance_index(bt.loads())
+    ir_s, ir_b = idle_ratio(st.loads()), idle_ratio(bt.loads())
+    print(f"{'makespan(ms)':<14} {ms_s:<18.0f} {ms_b:<18.0f} {(1 - ms_b / ms_s) * 100:+.1f}%")
+    print(f"{'负载均衡度':<14} {bi_s:<18.3f} {bi_b:<18.3f} {(bi_b / bi_s - 1) * 100:+.1f}%")
+    print(f"{'空闲率':<14} {ir_s:<18.3f} {ir_b:<18.3f} {(ir_b / ir_s - 1) * 100:+.1f}%")
+    print(f"\n逐任务层负载: {st.loads()}")
+    print(f"批量LPT层负载: {bt.loads()}")
+
+
 if __name__ == "__main__":
     demo()
     print()
     demo_adaptive()
+    print()
+    demo_balance()
